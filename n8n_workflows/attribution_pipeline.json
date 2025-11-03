@@ -1,0 +1,401 @@
+{
+  "name": "Attribution Pipeline with Approval",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "attribution_pipeline",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LANGCHAIN_API_URL || 'http://localhost:8000'}}/n8n/attribution",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contact_id",
+              "value": "={{$json.body.contact_id}}"
+            },
+            {
+              "name": "total_value",
+              "value": "={{$json.body.total_value}}"
+            },
+            {
+              "name": "model_type",
+              "value": "={{$json.body.model_type || 'w_shaped'}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "calculate-attribution",
+      "name": "Calculate Attribution (LangChain)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.total_value}}",
+              "operation": "larger",
+              "value2": 10000
+            }
+          ]
+        }
+      },
+      "id": "check-value",
+      "name": "Check if High Value",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "update",
+        "contactId": "={{$json.contact_id}}",
+        "updateFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "attributed_revenue",
+                "value": "={{$json.total_value}}"
+              },
+              {
+                "property": "attribution_model",
+                "value": "={{$json.model_type}}"
+              },
+              {
+                "property": "last_attribution_date",
+                "value": "={{new Date().getTime()}}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "update-hubspot-standard",
+      "name": "Update HubSpot (Standard)",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 1,
+      "position": [850, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "1",
+          "name": "HubSpot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C12345678",
+          "mode": "list"
+        },
+        "text": "⚠️ *High-Value Attribution Needs Approval*\n\nContact ID: {{$json.contact_id}}\nAttribution Value: ${{$json.total_value}}\nModel: {{$json.model_type}}\nTouchpoints: {{$json.touchpoint_count}}\n\nPlease review and approve:",
+        "otherOptions": {
+          "includeLinkToWorkflow": true
+        }
+      },
+      "id": "notify-approval-needed",
+      "name": "Notify Approval Needed",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "credentials": {
+        "slackApi": {
+          "id": "2",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "limit": 86400
+        }
+      },
+      "id": "wait-approval",
+      "name": "Wait for Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "webhookId": "approval-webhook-{{$execution.id}}"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.approved}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-approval",
+      "name": "Check Approval Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "update",
+        "contactId": "={{$json.contact_id}}",
+        "updateFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "attributed_revenue",
+                "value": "={{$json.total_value}}"
+              },
+              {
+                "property": "attribution_model",
+                "value": "={{$json.model_type}}"
+              },
+              {
+                "property": "last_attribution_date",
+                "value": "={{new Date().getTime()}}"
+              },
+              {
+                "property": "approval_status",
+                "value": "approved"
+              }
+            ]
+          }
+        }
+      },
+      "id": "update-hubspot-approved",
+      "name": "Update HubSpot (Approved)",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 1,
+      "position": [1450, 400],
+      "credentials": {
+        "hubspotApi": {
+          "id": "1",
+          "name": "HubSpot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LANGCHAIN_API_URL}}/n8n/ad-sync",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contact_id",
+              "value": "={{$json.contact_id}}"
+            },
+            {
+              "name": "from_stage",
+              "value": "lead"
+            },
+            {
+              "name": "to_stage",
+              "value": "customer"
+            },
+            {
+              "name": "conversion_value",
+              "value": "={{$json.total_value}}"
+            }
+          ]
+        }
+      },
+      "id": "sync-ad-platforms",
+      "name": "Sync to Ad Platforms",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C12345678",
+          "mode": "list"
+        },
+        "text": "✅ *Attribution Completed*\n\nContact ID: {{$json.contact_id}}\nAttribution Value: ${{$json.total_value}}\nModel: {{$json.model_type}}\nSynced to: {{$json.synced_platforms.join(', ')}}\n\nView in HubSpot: https://app.hubspot.com/contacts/{{$env.HUBSPOT_PORTAL_ID}}/contact/{{$json.contact_id}}"
+      },
+      "id": "notify-complete",
+      "name": "Notify Completion",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "credentials": {
+        "slackApi": {
+          "id": "2",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({status: 'success', contact_id: $json.contact_id, message: 'Attribution pipeline completed'})}}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 200]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Calculate Attribution (LangChain)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Attribution (LangChain)": {
+      "main": [
+        [
+          {
+            "node": "Check if High Value",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if High Value": {
+      "main": [
+        [
+          {
+            "node": "Update HubSpot (Standard)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Approval Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update HubSpot (Standard)": {
+      "main": [
+        [
+          {
+            "node": "Sync to Ad Platforms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Approval Needed": {
+      "main": [
+        [
+          {
+            "node": "Wait for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Approval": {
+      "main": [
+        [
+          {
+            "node": "Check Approval Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Approval Status": {
+      "main": [
+        [
+          {
+            "node": "Update HubSpot (Approved)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Update HubSpot (Approved)": {
+      "main": [
+        [
+          {
+            "node": "Sync to Ad Platforms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync to Ad Platforms": {
+      "main": [
+        [
+          {
+            "node": "Notify Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Completion": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Attribution",
+      "id": "1"
+    },
+    {
+      "name": "LangChain Integration",
+      "id": "2"
+    }
+  ]
+}

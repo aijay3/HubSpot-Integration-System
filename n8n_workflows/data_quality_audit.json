@@ -1,0 +1,283 @@
+{
+  "name": "Daily Data Quality Audit",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger (Daily 8am)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LANGCHAIN_API_URL}}/n8n/audit",
+        "authentication": "none",
+        "options": {}
+      },
+      "id": "run-audit",
+      "name": "Run Data Quality Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.quality_score}}",
+              "operation": "smaller",
+              "value2": 80
+            }
+          ]
+        }
+      },
+      "id": "check-quality",
+      "name": "Check Quality Score",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C12345678",
+          "mode": "list"
+        },
+        "text": "⚠️ *Data Quality Alert*\n\n*Quality Score:* {{$json.quality_score}}% (Below threshold of 80%)\n*Checks Passed:* {{$json.checks_passed}}\n*Checks Failed:* {{$json.checks_failed}}\n\n*Issues Found:*\n{{$json.issues.map(i => `• ${i.type}: ${i.count} occurrences`).join('\\n')}}\n\n*Action Required:* Please review and fix data quality issues.",
+        "otherOptions": {
+          "includeLinkToWorkflow": true
+        }
+      },
+      "id": "alert-low-quality",
+      "name": "Alert Low Quality",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "credentials": {
+        "slackApi": {
+          "id": "2",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C12345678",
+          "mode": "list"
+        },
+        "text": "✅ *Data Quality Check Passed*\n\n*Quality Score:* {{$json.quality_score}}%\n*Checks Passed:* {{$json.checks_passed}}\n*Checks Failed:* {{$json.checks_failed}}\n\nAll systems nominal. No action required."
+      },
+      "id": "notify-healthy",
+      "name": "Notify Healthy Status",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [850, 200],
+      "credentials": {
+        "slackApi": {
+          "id": "2",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1ABC123DEF456GHI789JKL012MNO345PQR678STU901VWX",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Data Quality Audit Log",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{$json.timestamp}}",
+            "quality_score": "={{$json.quality_score}}",
+            "checks_passed": "={{$json.checks_passed}}",
+            "checks_failed": "={{$json.checks_failed}}",
+            "issues": "={{JSON.stringify($json.issues)}}"
+          }
+        }
+      },
+      "id": "log-results",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1050, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.quality_score}}",
+              "operation": "smaller",
+              "value2": 60
+            }
+          ]
+        }
+      },
+      "id": "check-critical",
+      "name": "Check if Critical",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "fromEmail": "marketing-ops@company.com",
+        "toEmail": "marketing-lead@company.com, data-ops@company.com",
+        "subject": "CRITICAL: Data Quality Score Below 60%",
+        "emailType": "html",
+        "message": "<html><body><h2 style=\"color: #dc3545;\">⚠️ CRITICAL DATA QUALITY ALERT</h2><p><strong>Quality Score:</strong> {{$json.quality_score}}%</p><p><strong>Timestamp:</strong> {{$json.timestamp}}</p><p><strong>Issues:</strong></p><ul>{{$json.issues.map(i => `<li>${i.type}: ${i.count} occurrences</li>`).join('')}}</ul><p><strong>Immediate action required to prevent impact on attribution accuracy and ad platform syncing.</strong></p></body></html>"
+      },
+      "id": "email-critical",
+      "name": "Send Critical Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1250, 500],
+      "credentials": {
+        "smtp": {
+          "id": "3",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Daily 8am)": {
+      "main": [
+        [
+          {
+            "node": "Run Data Quality Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Data Quality Audit": {
+      "main": [
+        [
+          {
+            "node": "Check Quality Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Quality Score": {
+      "main": [
+        [
+          {
+            "node": "Notify Healthy Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Low Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Low Quality": {
+      "main": [
+        [
+          {
+            "node": "Check if Critical",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Healthy Status": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Critical": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Critical Alert Email": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Data Quality",
+      "id": "4"
+    },
+    {
+      "name": "LangChain Integration",
+      "id": "2"
+    }
+  ]
+}
