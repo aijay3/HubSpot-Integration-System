@@ -77,19 +77,19 @@ This system implements a complete HubSpot integration with the following capabil
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    n8n Workflows                         │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐        │
-│  │Attribution │  │  Campaign  │  │Data Quality│        │
-│  │  Pipeline  │  │  Reporting │  │   Audit    │        │
-│  └──────┬─────┘  └──────┬─────┘  └──────┬─────┘        │
-│         │                │                │              │
-│         │    Orchestration Layer          │              │
-└─────────┼────────────────┼────────────────┼──────────────┘
+│                    n8n Workflows                        │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐         │
+│  │Attribution │  │  Campaign  │  │Data Quality│         │
+│  │  Pipeline  │  │  Reporting │  │   Audit    │         │
+│  └──────┬─────┘  └──────┬─────┘  └──────┬─────┘         │
+│         │                │                │             │
+│         │    Orchestration Layer          │             │
+└─────────┼────────────────┼────────────────┼─────────────┘
           │                │                │
-          │   HTTP/Webhooks                 │
+          │           HTTP/Webhooks         │
           ▼                ▼                ▼
 ┌─────────────────────────────────────────────────────────┐
-│              FastAPI REST API Server                     │
+│              FastAPI REST API Server                    │
 │  • Attribution endpoints    • n8n integration endpoints │
 │  • Health checks           • Webhook receivers          │
 │  • Campaign metrics        • RAG queries                │
@@ -97,7 +97,7 @@ This system implements a complete HubSpot integration with the following capabil
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────┐
-│            LangChain Intelligence Layer                  │
+│            LangChain Intelligence Layer                 │
 │  • Attribution Agent    • Multi-touch models            │
 │  • RAG Knowledge Base   • UTM validation                │
 │  • Ad platform sync     • Decision making               │
